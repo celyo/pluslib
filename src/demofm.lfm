@@ -1,0 +1,98 @@
+object Form1: TForm1
+  Left = 0
+  Height = 460
+  Top = 0
+  Width = 462
+  Caption = 'Form1'
+  ClientHeight = 460
+  ClientWidth = 462
+  OnCreate = FormCreate
+  Position = poScreenCenter
+  LCLVersion = '1.6.4.0'
+  Visible = False
+  object DBGrid1: TDBGrid
+    Left = 0
+    Height = 252
+    Top = 208
+    Width = 462
+    Align = alBottom
+    AutoFillColumns = True
+    Color = clWindow
+    Columns = <    
+      item
+        Title.Caption = 'NAME'
+        Width = 148
+        FieldName = 'NAME'
+      end    
+      item
+        Title.Caption = 'DESCRIPTION'
+        Width = 148
+        FieldName = 'DESCRIPTION'
+      end    
+      item
+        Title.Caption = 'PRICE'
+        Width = 149
+        FieldName = 'PRICE'
+      end>
+    DataSource = DataSource1
+    FixedCols = 0
+    Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit]
+    TabOrder = 0
+  end
+  object DBLookupComboBox1: TDBLookupComboBox
+    Left = 40
+    Height = 27
+    Top = 88
+    Width = 359
+    KeyField = 'ID'
+    ListField = 'NAME'
+    ListFieldIndex = 0
+    ListSource = DataSource1
+    LookupCache = False
+    TabOrder = 1
+  end
+  object DateEdit1: TDateEdit
+    Left = 43
+    Height = 27
+    Top = 17
+    Width = 356
+    CalendarDisplaySettings = [dsShowHeadings, dsShowDayNames]
+    DateOrder = doNone
+    ButtonWidth = 23
+    NumGlyphs = 1
+    MaxLength = 0
+    TabOrder = 2
+  end
+  object DataSource1: TDataSource
+    DataSet = MemDataset1
+    left = 136
+    top = 264
+  end
+  object MemDataset1: TMemDataset
+    FieldDefs = <    
+      item
+        Name = 'ID'
+        Attributes = [faRequired]
+        DataType = ftLargeint
+      end    
+      item
+        Name = 'NAME'
+        Attributes = [faRequired]
+        DataType = ftString
+        Size = 100
+      end    
+      item
+        Name = 'DESCRIPTION'
+        DataType = ftString
+        Size = 200
+      end    
+      item
+        Name = 'PRICE'
+        DataType = ftFMTBcd
+        Precision = 2
+        Size = 18
+      end>
+    left = 256
+    top = 264
+  end
+end
