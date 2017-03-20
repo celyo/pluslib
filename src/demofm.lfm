@@ -21,12 +21,12 @@ object Form1: TForm1
     Columns = <    
       item
         Title.Caption = 'NAME'
-        Width = 148
+        Width = 149
         FieldName = 'NAME'
       end    
       item
         Title.Caption = 'DESCRIPTION'
-        Width = 148
+        Width = 149
         FieldName = 'DESCRIPTION'
       end    
       item
@@ -41,7 +41,7 @@ object Form1: TForm1
   end
   object DBLookupComboBox1: TDBLookupComboBox
     Left = 40
-    Height = 27
+    Height = 29
     Top = 88
     Width = 359
     KeyField = 'ID'

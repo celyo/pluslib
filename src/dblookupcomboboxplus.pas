@@ -11,9 +11,47 @@ type
 
   { TDBLookupPlus }
 
-  TDBLookupPlus = class(TDBLookup)
-  public
+  TDBLookupPlus = class(TComponent)
+  private
+    FControlLink: TFieldDataLink;
+    FListLink: TDataLink;
+    FListSource: TDataSource;
+    FLookupSource: TDataSource;
+    FDataFieldNames: string;
+    FKeyFieldNames: string;
+    FListFieldNames: string;
+    FListFieldIndex: Integer;
+    FDataFields: TList;  // Data Fields to lookup/edit
+    FKeyFields: TList;   // Key fields in lookup dataset
+    FListFields: TList;  // List fields in lookup dataset
+    FNullValueKey: TShortcut;
+    FInitializing: Boolean;
+    procedure ActiveChange(Sender: TObject);
+    procedure DatasetChange(Sender: TObject);
+    procedure DoInitialize;
+    function GetKeyFieldName: string;
+    function GetListFieldName: string;
+    function GetListSource: TDataSource;
+    procedure SetKeyFieldName(const Value: string);
+    procedure SetListFieldName(const Value: string);
+    procedure SetListSource(Value: TDataSource);
+  protected
     function HandleNullKey(var Key: Word; Shift: TShiftState): Boolean;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    procedure Initialize(AControlDataLink: TFieldDataLink);
+    function KeyFieldValue: Variant;
+    procedure UpdateData(ValueIndex: Integer; ScrollDataset: Boolean);
+    function  GetKeyValue: Variant;
+    // properties to be published by owner control
+    // these are not used where data control Field is dbLookup
+    property KeyField: string read GetKeyFieldName write SetKeyFieldName;
+    property ListField: string read GetListFieldName write SetListFieldName;
+    property ListFieldIndex: Integer read FListFieldIndex write FListFieldIndex default 0;
+    property ListSource: TDataSource read GetListSource write SetListSource;
+    property NullValueKey: TShortcut read FNullValueKey write FNullValueKey;
   end;
 
   { TDBLookupComboBoxPlus }
@@ -149,25 +187,234 @@ uses
 
 { TDBLookupPlus }
 
-function TDBLookupPlus.HandleNullKey(var Key: Word; Shift: TShiftState
-  ): Boolean;
+procedure TDBLookupPlus.ActiveChange(Sender: TObject);
+begin
+  if (csDestroying in ComponentState) then
+    Exit;
+  if FListLink.Active then
+    Initialize(FControlLink);
+end;
+
+procedure TDBLookupPlus.DatasetChange(Sender: TObject);
+begin
+  if FListLink.Active and not FListLink.Editing then
+  begin
+    if Assigned(FControlLink) and FControlLink.Active then
+      FControlLink.Reset;
+  end;
+end;
+
+procedure TDBLookupPlus.DoInitialize;
+var
+  ListFields: TList;
+  ListLinkDataset: TDataSet;
+begin
+  FDataFields.Clear;
+  FKeyFields.Clear;
+  FListField := nil;
+  FHasLookUpField := False;
+  FLookUpFieldIsCached := False;
+  if Assigned(FControlLink) and Assigned(FControlLink.DataSet)
+    and FControlLink.DataSet.Active then
+  begin
+    if Assigned(FControlLink.Field) then
+    begin
+      FHasLookUpField := (FControlLink.Field.FieldKind = fkLookup);
+      FLookUpFieldIsCached := (FHasLookupField and FControlLink.Field.LookupCache);
+      if FHasLookUpField then
+      begin
+        if FLookupSource = nil then
+          FLookupSource := TDataSource.Create(Self);
+        if (FLookupSource.DataSet <> FControlLink.Field.LookupDataSet) then
+          FLookupSource.DataSet:= FControlLink.Field.LookupDataSet;
+        FListLink.DataSource := FLookupSource;
+        FDataFieldNames := FControlLink.Field.KeyFields;
+        FKeyFieldNames := FControlLink.Field.LookupKeyFields;
+      end else
+        FDataFieldNames := FControlLink.Field.FieldName;
+      FControlLink.DataSet.GetFieldList(FDataFields, FDataFieldNames);
+    end;
+  end;
+  if not FHasLookUpField then
+    FListLink.DataSource := FListSource;
+
+  if (FKeyFieldNames > '') and FListLink.Active then
+  begin
+    ListLinkDataset := FListLink.DataSet;
+    ListFields := TList.Create;
+    try
+      ListLinkDataset.GetFieldList(ListFields, FListFieldNames);
+      ListLinkDataset.GetFieldList(FKeyFields, FKeyFieldNames);
+      if FHasLookUpField then
+      begin
+        FListField := ListLinkDataset.FindField(FControlLink.Field.LookupResultField);
+        if (Assigned(FListField) and (ListFields.IndexOf(FListField) < 0)) then
+          ListFields.Insert(0, FListField);
+        if (ListFields.Count > 0) then
+          FListField := TField(ListFields[0]);
+      end else
+      begin
+        if ((FKeyFields.Count > 0) and (ListFields.Count = 0)) then
+          ListFields.Add(FKeyFields[0]);
+        if ((FListFieldIndex > -1) and (FListFieldIndex < ListFields.Count)) then
+          FListField := TField(ListFields[FListFieldIndex])
+        else
+          FListField := TField(ListFields[0]);
+      end;
+    finally
+      ListFields.Free;
+    end;
+    FetchLookupData;
+  end;
+end;
+
+function TDBLookupPlus.GetKeyFieldName: string;
+begin
+  if FHasLookUpField then
+    Result:= ''
+  else
+    Result := FKeyFieldNames;
+end;
+
+function TDBLookupPlus.GetListFieldName: string;
+begin
+  if FHasLookUpField then
+    Result:= ''
+  else
+    Result := FListFieldNames;
+end;
+
+function TDBLookupPlus.GetListSource: TDataSource;
+begin
+  if FHasLookUpField then
+    Result:= nil
+  else
+    Result:= FListSource;
+end;
+
+procedure TDBLookupPlus.SetKeyFieldName(const Value: string);
+begin
+  FKeyFieldNames := Value;
+end;
+
+procedure TDBLookupPlus.SetListFieldName(const Value: string);
+begin
+  FListFieldNames := Value;
+end;
+
+procedure TDBLookupPlus.SetListSource(Value: TDataSource);
+begin
+  if FListSource = Value then
+    Exit;
+  if Assigned(FListSource) then
+    FListSource.RemoveFreeNotification(Self);
+  FListSource:= Value;
+  if Assigned(FListSource) then
+    FListSource.FreeNotification(Self);
+end;
+
+function TDBLookupPlus.HandleNullKey(var Key: Word; Shift: TShiftState): Boolean;
 var
   i: Integer;
 begin
   Result:=False;
-  if NullValueKey = KeyToShortCut(Key, Shift) then
+  if FNullValueKey=KeyToShortCut(Key, Shift) then
   begin
     // null associated field
-    if Assigned(ControlLink) and (DataFieldNames<>'') and ControlLink.Active then
+    if Assigned(FControlLink) and (FDataFieldNames<>'') and FControlLink.Active then
     begin
-      ControlLink.DataSet.Edit;
-      for i:=0 to DataFields.Count-1 do
-        TField(DataFields[i]).Clear;
+      FControlLink.DataSet.Edit;
+      for i:=0 to FDataFields.Count-1 do
+        TField(FDataFields[i]).Clear;
     end else
       Result:=Assigned(FListLink.DataSet) and FListLink.DataSet.Active and Assigned(FListField);
     Key:=VK_UNKNOWN;
   end;
 end;
+
+procedure TDBLookupPlus.Notification(AComponent: TComponent;
+  Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation=opRemove) and (AComponent = FListSource) then
+    FListSource := nil;
+end;
+
+constructor TDBLookupPlus.Create(AOwner: TComponent);
+begin
+  inherited;
+  FDataFields := TList.Create;
+  FKeyFields := TList.Create;
+  FListLink := TDBLookupDataLink.Create(Self);
+end;
+
+destructor TDBLookupPlus.Destroy;
+begin
+  FDataFields.Destroy;
+  FKeyFields.Destroy;
+  FListLink.Destroy;
+  inherited Destroy;
+end;
+
+procedure TDBLookupPlus.Initialize(AControlDataLink: TFieldDataLink);
+begin
+  if FInitializing then
+    Exit;
+  FInitializing := True;
+  try
+    FControlLink := AControlDataLink;
+    DoInitialize;
+  finally
+    FInitializing := False;
+  end;
+end;
+
+function TDBLookupPlus.KeyFieldValue: Variant;
+begin
+  if Assigned(FControlLink) and FControlLink.Active and (FDataFieldNames <> '') then
+    Result := FControlLink.DataSet.FieldValues[FDataFieldNames]
+  else
+    Result := Null;
+end;
+
+procedure TDBLookupPlus.UpdateData(ValueIndex: Integer; ScrollDataset: Boolean);
+var
+  I: Integer;
+  Key: Variant;
+  SavedEvent: TNotifyEvent;
+begin
+  if (ValueIndex < 0) or (ValueIndex >= Length(FListKeys)) then
+    Exit;
+  Key := FListKeys[ValueIndex];
+  if ScrollDataset then
+    FListLink.DataSet.Locate(FKeyFieldNames, Key, []);
+  if Assigned(FControlLink) and FControlLink.Active then
+  begin
+    if VarSameValue(Key, FControlLink.DataSet.FieldValues[FDataFieldNames]) then
+      Exit;
+    SavedEvent := FControlLink.OnDataChange;
+    FControlLink.OnDataChange := nil;
+    FControlLink.Modified;
+    FControlLink.Edit;
+    FControlLink.OnDataChange := SavedEvent;
+    if FDataFields.Count = 1 then
+      TField(FDataFields[0]).Value := Key
+    else
+    begin
+      for I := 0 to FDataFields.Count -1 do
+        TField(FDataFields[I]).Value := Key[I];
+    end;
+  end;
+end;
+
+function TDBLookupPlus.GetKeyValue: Variant;
+begin
+  if Assigned(FControlLink) and FControlLink.Active and (FDataFieldNames <> '') then
+    Result := FControlLink.DataSet.FieldValues[FDataFieldNames]
+  else
+    Result := Null;
+end;
+
 
 { TDBLookupComboBoxPlus }
 
