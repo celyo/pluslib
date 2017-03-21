@@ -3,6 +3,7 @@ object Form1: TForm1
   Height = 460
   Top = 0
   Width = 462
+  ActiveControl = DBGrid1
   Caption = 'Form1'
   ClientHeight = 460
   ClientWidth = 462
@@ -21,12 +22,12 @@ object Form1: TForm1
     Columns = <    
       item
         Title.Caption = 'NAME'
-        Width = 149
+        Width = 148
         FieldName = 'NAME'
       end    
       item
         Title.Caption = 'DESCRIPTION'
-        Width = 149
+        Width = 148
         FieldName = 'DESCRIPTION'
       end    
       item
@@ -41,7 +42,7 @@ object Form1: TForm1
   end
   object DBLookupComboBox1: TDBLookupComboBox
     Left = 40
-    Height = 29
+    Height = 27
     Top = 88
     Width = 359
     KeyField = 'ID'
@@ -62,6 +63,37 @@ object Form1: TForm1
     NumGlyphs = 1
     MaxLength = 0
     TabOrder = 2
+  end
+  object Panel1: TPanel
+    Left = 16
+    Height = 50
+    Top = 136
+    Width = 424
+    BevelOuter = bvNone
+    Caption = 'Container for ComboboxPlus'
+    TabOrder = 3
+  end
+  object DateTimePicker1: TDateTimePicker
+    Left = 43
+    Height = 23
+    Top = 56
+    Width = 85
+    CenturyFrom = 1941
+    MaxDate = 2958465
+    MinDate = -53780
+    TabOrder = 4
+    TrailingSeparator = False
+    TextForNullDate = 'NULL'
+    LeadingZeros = True
+    Kind = dtkDate
+    TimeFormat = tf24
+    TimeDisplay = tdHMS
+    DateMode = dmComboBox
+    Date = 42815
+    Time = 0.71758894676168
+    UseDefaultSeparators = True
+    HideDateTimeParts = []
+    MonthNames = 'Long'
   end
   object DataSource1: TDataSource
     DataSet = MemDataset1

@@ -5,8 +5,8 @@ unit demofm;
 interface
 
 uses
-  Classes, SysUtils, db, memds, FileUtil, Forms, Controls, Graphics, Dialogs,
-  DBGrids, DbCtrls, EditBtn;
+  Classes, SysUtils, db, memds, FileUtil, DateTimePicker, Forms, Controls,
+  Graphics, Dialogs, DBGrids, DbCtrls, EditBtn, ExtCtrls, StdCtrls, Buttons;
 
 type
 
@@ -15,12 +15,16 @@ type
   TForm1 = class(TForm)
     DataSource1: TDataSource;
     DateEdit1: TDateEdit;
+    DateTimePicker1: TDateTimePicker;
     DBGrid1: TDBGrid;
     DBLookupComboBox1: TDBLookupComboBox;
     MemDataset1: TMemDataset;
+    Panel1: TPanel;
     procedure FormCreate(Sender: TObject);
   private
     procedure InitDataset;
+    procedure CreateDBLookupComboboxPlus;
+    procedure CreateSimpleEdit;
   public
     { public declarations }
   end;
@@ -40,6 +44,8 @@ uses
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   InitDataset;
+  CreateDBLookupComboboxPlus;
+  CreateSimpleEdit;
 end;
 
 procedure TForm1.InitDataset;
@@ -66,6 +72,29 @@ begin
   end;
 
   MemDataset1.First;
+end;
+
+procedure TForm1.CreateDBLookupComboboxPlus;
+var
+  DBLookupCombo : TDBLookupComboBoxPlus;
+begin
+  DBLookupCombo := TDBLookupComboBoxPlus.Create(Self);
+
+  DBLookupCombo.Left := 10;
+  DBLookupCombo.Top := 10;
+  DBLookupCombo.Width := 356;
+  DBLookupCombo.Height := 27;
+
+  DBLookupCombo.ListSource := DataSource1;
+  DBLookupCombo.ListField := 'NAME';
+  DBLookupCombo.KeyField := 'ID';
+
+  DBLookupCombo.Parent := Panel1;
+end;
+
+procedure TForm1.CreateSimpleEdit;
+begin
+
 end;
 
 end.
