@@ -5,7 +5,7 @@ unit dblookupcomboboxplus;
 interface
 
 uses
-  Classes, SysUtils, LMessages, LCLStrConsts, DB, DBCtrls, EditBtn, Variants, Controls, Graphics;
+  Classes, SysUtils, LMessages, LCLStrConsts, DB, DBCtrls, memds, EditBtn, Variants, Controls, Graphics;
 
 type
 
@@ -16,7 +16,8 @@ type
     FControlLink: TFieldDataLink;
     FListLink: TDataLink;
     FListSource: TDataSource;
-    FLookupSource: TDataSource;
+    FExternalLookupSource: TDataSource;
+    FInternalLookupSource: TDataSource;
     FKeyFieldNames: string;
     FListFieldNames: string;
     FListFieldIndex: Integer;
@@ -24,17 +25,20 @@ type
     FListFields: TList;  // List fields in lookup dataset
     FInitializing: Boolean;
     FHasLookUpField: Boolean;
+    FMemDataSet : TMemDataset;
     procedure ActiveChange(Sender: TObject);
     procedure DatasetChange(Sender: TObject);
-    procedure DoInitialize;
     function GetKeyFieldName: string;
     function GetListFieldName: string;
     function GetListSource: TDataSource;
     procedure SetKeyFieldName(const Value: string);
     procedure SetListFieldName(const Value: string);
     procedure SetListSource(Value: TDataSource);
+    procedure DoInitialize;
+    procedure InitMemDataSet;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    procedure FetchLookupData;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -47,6 +51,7 @@ type
     property ListField: string read GetListFieldName write SetListFieldName;
     property ListFieldIndex: Integer read FListFieldIndex write FListFieldIndex default 0;
     property ListSource: TDataSource read GetListSource write SetListSource;
+    property InternalLookupSource: TDataSource read FInternalLookupSource;
   end;
 
   { TDBLookupComboBoxPlus }
@@ -245,6 +250,7 @@ procedure TDBLookupPlus.DatasetChange(Sender: TObject);
 begin
   if FListLink.Active and not FListLink.Editing then
   begin
+    FetchLookupData;
     if Assigned(FControlLink) and FControlLink.Active then
       FControlLink.Reset;
   end;
@@ -266,11 +272,11 @@ begin
       FHasLookUpField := (FControlLink.Field.FieldKind = fkLookup);
       if FHasLookUpField then
       begin
-        if FLookupSource = nil then
-          FLookupSource := TDataSource.Create(Self);
-        if (FLookupSource.DataSet <> FControlLink.Field.LookupDataSet) then
-          FLookupSource.DataSet:= FControlLink.Field.LookupDataSet;
-        FListLink.DataSource := FLookupSource;
+        if FExternalLookupSource = nil then
+          FExternalLookupSource := TDataSource.Create(Self);
+        if (FExternalLookupSource.DataSet <> FControlLink.Field.LookupDataSet) then
+          FExternalLookupSource.DataSet:= FControlLink.Field.LookupDataSet;
+        FListLink.DataSource := FExternalLookupSource;
         FKeyFieldNames := FControlLink.Field.LookupKeyFields;
       end;
     end;
@@ -299,8 +305,72 @@ begin
         FListFields.AddList(FKeyFields);
       end;
     end;
-    //FetchLookupData;
+    InitMemDataSet;
+    FetchLookupData;
   end;
+end;
+
+procedure TDBLookupPlus.InitMemDataSet;
+var
+  FieldsToAdd : TList;
+  CurrentField : TField;
+  AddedFields : String;
+  aIndex : Integer;
+begin
+  if FMemDataSet.Active then
+  begin
+    FMemDataSet.Close;
+  end;
+  FMemDataSet.FieldDefs.Clear;
+
+  FieldsToAdd := TList.Create;
+  try
+    if (FKeyFields.Count > 0) then
+    begin
+      FieldsToAdd.AddList(FKeyFields);
+    end;
+    if (FListFields.Count > 0) then
+    begin
+      FieldsToAdd.AddList(FListFields);
+    end;
+
+    AddedFields := '';
+    for aIndex := 0 to FieldsToAdd.Count - 1 do
+    begin
+      CurrentField := TField(FieldsToAdd[aIndex]);
+      if Pos(';' + CurrentField.FieldName + ';', AddedFields) <= 0 then
+      begin
+        with FMemDataSet.FieldDefs.AddFieldDef do
+        begin
+          Name := CurrentField.FieldName;
+          DataType := CurrentField.DataType;
+          Size := CurrentField.Size;
+          //Precision := CurrentField.Precision;
+
+          if (not CurrentField.Visible) then
+          begin
+            Attributes := Attributes + [faHiddenCol];
+          end;
+          if (CurrentField.ReadOnly) then
+          begin
+            Attributes := Attributes + [faReadonly];
+          end;
+          if (CurrentField.Required) then
+          begin
+            Attributes := Attributes + [faRequired];
+          end;
+        end;
+
+        AddedFields := AddedFields + ';' + CurrentField.FieldName + ';';
+      end;
+    end;
+
+  finally
+    FieldsToAdd.Free;
+  end;
+
+  FMemDataSet.FieldDefs.Updated := false;
+  FMemDataSet.FieldDefs.Update;
 end;
 
 function TDBLookupPlus.GetKeyFieldName: string;
@@ -356,19 +426,73 @@ begin
     FListSource := nil;
 end;
 
+procedure TDBLookupPlus.FetchLookupData;
+var
+  KeyIndex, KeyListCount: Integer;
+  ListLinkDataSet: TDataSet;
+  Bookmark: TBookmark;
+begin
+  if FMemDataSet.Active then
+  begin
+    FMemDataSet.Close;
+  end;
+  FMemDataSet.Open;
+
+  ListLinkDataSet := FListLink.DataSet;
+  if (not Assigned(ListLinkDataSet)) or ListLinkDataSet.IsEmpty then
+  begin
+    Exit;
+  end;
+
+  Bookmark := ListLinkDataSet.GetBookmark;
+  //ListLinkDataSet.BlockReadSize := 1;
+  FMemDataSet.DisableControls;
+  try
+    ListLinkDataSet.First;
+    while not ListLinkDataSet.EOF do
+    begin
+      FMemDataSet.Append;
+      FMemDataSet.FieldValues[FKeyFieldNames] := ListLinkDataSet.FieldValues[FKeyFieldNames];
+      FMemDataSet.FieldValues[FListFieldNames] := ListLinkDataSet.FieldValues[FListFieldNames];
+      FMemDataSet.Post;
+
+      ListLinkDataSet.Next;
+    end;
+  finally
+    FMemDataSet.First;
+    FMemDataSet.EnableControls;
+    ListLinkDataSet.GotoBookmark(Bookmark);
+    ListLinkDataSet.FreeBookmark(Bookmark);
+    //ListLinkDataSet.BlockReadSize := 0;
+  end;
+end;
+
 constructor TDBLookupPlus.Create(AOwner: TComponent);
 begin
-  inherited;
+  inherited Create(AOwner);
+
   FKeyFields := TList.Create;
   FListFields := TList.Create;
   FListLink := TDBLookupDataLinkPlus.Create(Self);
+  FMemDataSet := TMemDataset.Create(Self);
+  FInternalLookupSource := TDataSource.Create(Self);
+  FInternalLookupSource.DataSet := FMemDataSet;
+  //FInternalLookupSource.AutoEdit := false;
 end;
 
 destructor TDBLookupPlus.Destroy;
 begin
+  if FMemDataSet.Active then
+  begin
+    FMemDataSet.Close;
+  end;
+
   FKeyFields.Destroy;
   FListFields.Destroy;
   FListLink.Destroy;
+  FInternalLookupSource.Destroy;
+  FMemDataSet.Destroy;
+
   inherited Destroy;
 end;
 
@@ -407,8 +531,9 @@ procedure TDBLookupComboBoxPlus.UpdateLookup;
 begin
   if ([csLoading, csDestroying] * ComponentState) = [] then
   begin
+    FLookup.Initialize(FDataLink);
+    EditText := IntToStr(FLookup.InternalLookupSource.DataSet.RecordCount);
 { FIXME
-    FLookup.Initialize(FDataLink, Items);
     i := FLookup.GetKeyIndex;
     ItemIndex := i;
     if i = -1 then
