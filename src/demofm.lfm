@@ -17,6 +17,7 @@ object Form1: TForm1
     Top = 208
     Width = 462
     Align = alBottom
+    AutoEdit = False
     AutoFillColumns = True
     Color = clWindow
     Columns = <    
@@ -37,8 +38,9 @@ object Form1: TForm1
       end>
     DataSource = DataSource1
     FixedCols = 0
-    Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit]
+    Options = [dgTitles, dgColumnResize, dgColumnMove, dgColLines, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit, dgAnyButtonCanSelect, dgDisableDelete, dgDisableInsert]
     TabOrder = 0
+    TitleStyle = tsNative
   end
   object DBLookupComboBox1: TDBLookupComboBox
     Left = 40
@@ -94,6 +96,24 @@ object Form1: TForm1
     UseDefaultSeparators = True
     HideDateTimeParts = []
     MonthNames = 'Long'
+  end
+  object ComboBoxEx1: TComboBoxEx
+    Left = 140
+    Height = 29
+    Top = 56
+    Width = 100
+    ItemHeight = 0
+    ItemsEx = <>
+    ReadOnly = True
+    TabOrder = 5
+  end
+  object CheckComboBox1: TCheckComboBox
+    Left = 248
+    Height = 29
+    Top = 56
+    Width = 100
+    ItemHeight = 0
+    TabOrder = 6
   end
   object DataSource1: TDataSource
     DataSet = MemDataset1

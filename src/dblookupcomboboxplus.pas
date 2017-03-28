@@ -5,7 +5,7 @@ unit dblookupcomboboxplus;
 interface
 
 uses
-  Classes, SysUtils, LMessages, LCLStrConsts, DB, DBCtrls, memds, EditBtn, Variants, Controls, Graphics;
+  Classes, SysUtils, LMessages, DB, DBCtrls, memds, EditBtn, Variants, Controls, Graphics;
 
 type
 
@@ -186,7 +186,7 @@ type
 implementation
 
 uses
-  LCLType;
+  LCLType, DBGrids, Forms, Math;
 
 type
 
@@ -198,10 +198,228 @@ private
   FRecordUpdated: Boolean;
 protected
   procedure ActiveChanged; override;
-  procedure DataEvent(Event: TDataEvent; Info: Ptrint); override;
+  procedure DataEvent(Event: DB.TDataEvent; Info: Ptrint); override;
 public
   constructor Create(ALookup: TDBLookupPlus);
 end;
+
+{ TGridPopupForm }
+
+{ TPopupDisplaySettings }
+
+TPopupDisplaySettings = class(TPersistent)
+private
+  FRows: Integer;
+  FShowTitles: Boolean;
+  FWidth: Integer;
+published
+  property Rows : Integer read FRows write FRows;
+  property ShowTitles : Boolean read FShowTitles write FShowTitles;
+//  property Sizable : Boolean read FSizable write FSizable;
+  property Width : Integer read FWidth write FWidth;
+end;
+
+TReturnValueEvent = procedure (Sender: TObject; const AValue: Variant) of object;
+
+TGridPopupForm = class(TForm)
+private
+  FDBGrid : TDBGrid;
+
+  FClosed: boolean;
+  FPopupOrigin: TPoint;
+  FOnReturnValue: TReturnValueEvent;
+  function GetDataSource: TDataSource;
+  function GetValue: Variant;
+  procedure SetDataSource(AValue: TDataSource);
+  procedure SetValue(AValue: Variant);
+
+  procedure Initialize(const PopupOrigin: TPoint; const PopupWidth : Integer; AValue: Variant;
+                       const DisplaySettings: TPopupDisplaySettings);
+  procedure KeepInView(const PopupOrigin: TPoint);
+  procedure ApplyDisplaySettings(ADisplaySettings: TPopupDisplaySettings);
+  procedure ReturnValue;
+
+  procedure GridClick(Sender: TObject);
+  procedure GridKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+  procedure FormDeactivate(Sender: TObject);
+protected
+  procedure DoClose(var CloseAction: TCloseAction); override;
+  procedure DoCreate; override;
+
+  property DataSource : TDataSource read GetDataSource write SetDataSource;
+  property Value : Variant read GetValue write SetValue;
+  procedure Paint; override;
+public
+  constructor Create(AOwner: TComponent); override;
+  destructor Destroy; override;
+end;
+
+procedure TGridPopupForm.GridClick(Sender: TObject);
+begin
+  ReturnValue;
+end;
+
+procedure TGridPopupForm.GridKeyDown(Sender: TObject; var Key: Word;
+  Shift: TShiftState);
+var
+  Handled: Boolean;
+begin
+  if Shift=[] then
+  begin
+    Handled := true;
+    case Key of
+      VK_ESCAPE:
+        Close;
+      VK_RETURN, VK_SPACE:
+          ReturnValue
+      else
+        Handled := false;
+    end;
+    if Handled then
+      Key := 0;
+  end;
+end;
+
+procedure TGridPopupForm.FormDeactivate(Sender: TObject);
+begin
+  Hide;
+  if (not FClosed) then
+    Close;
+end;
+
+procedure TGridPopupForm.Initialize(const PopupOrigin: TPoint; const PopupWidth : Integer; AValue: Variant;
+  const DisplaySettings: TPopupDisplaySettings);
+begin
+  Width := PopupWidth;
+  FPopupOrigin := PopupOrigin;
+  ApplyDisplaySettings(DisplaySettings);
+  KeepInView(PopupOrigin);
+  Value := AValue;
+end;
+
+function TGridPopupForm.GetValue: Variant;
+begin
+  Result := Null; //FIXME
+end;
+
+function TGridPopupForm.GetDataSource: TDataSource;
+begin
+  Result := FDBGrid.DataSource;
+end;
+
+procedure TGridPopupForm.SetDataSource(AValue: TDataSource);
+begin
+  FDBGrid.DataSource := AValue;
+end;
+
+procedure TGridPopupForm.KeepInView(const PopupOrigin: TPoint);
+var
+  ABounds: TRect;
+begin
+  ABounds := Screen.MonitorFromPoint(PopupOrigin).BoundsRect;
+  if PopupOrigin.X + Width > ABounds.Right then
+    Left := ABounds.Right - Width
+  else
+    Left := PopupOrigin.X;
+  if PopupOrigin.Y + Height > ABounds.Bottom then
+    Top := ABounds.Bottom - Height
+  else
+    Top := PopupOrigin.Y;
+  //store the fitting point, so the form won't move if it layout is changed back to simple
+  FPopupOrigin := Point(Left, Top);
+end;
+
+procedure TGridPopupForm.ApplyDisplaySettings(
+  ADisplaySettings: TPopupDisplaySettings);
+begin
+  if (ADisplaySettings.ShowTitles) then
+  begin
+    FDBGrid.Options := FDBGrid.Options + [dgTitles];
+  end
+  else
+  begin
+    FDBGrid.Options := FDBGrid.Options - [dgTitles];
+  end;
+
+
+  if (ADisplaySettings.Width > 0) then
+  begin
+    Width := ADisplaySettings.Width;
+  end
+  else
+  begin
+    // auto size
+  end;
+
+  if (ADisplaySettings.Rows > 0) then
+  begin
+    Height := IfThen(ADisplaySettings.ShowTitles, ADisplaySettings.Rows + 1, ADisplaySettings.Rows) * FDBGrid.DefaultRowHeight;
+  end
+  else
+  begin
+    Height := IfThen(ADisplaySettings.ShowTitles, 10 + 1,10) * FDBGrid.DefaultRowHeight; // auto size
+  end;
+end;
+
+procedure TGridPopupForm.ReturnValue;
+begin
+  if Assigned(FOnReturnValue) then
+    FOnReturnValue(Self, Value);
+  if not FClosed then
+    Close;
+end;
+
+procedure TGridPopupForm.DoClose(var CloseAction: TCloseAction);
+begin
+  inherited DoClose(CloseAction);
+
+  FClosed := true;
+  Application.RemoveOnDeactivateHandler(@FormDeactivate);
+  CloseAction := caFree;
+end;
+
+procedure TGridPopupForm.DoCreate;
+begin
+  FClosed := false;
+  Application.AddOnDeactivateHandler(@FormDeactivate);
+
+  inherited DoCreate;
+end;
+
+procedure TGridPopupForm.SetValue(AValue: Variant);
+begin
+
+end;
+
+procedure TGridPopupForm.Paint;
+begin
+  inherited Paint;
+  //Canvas.Pen.Color := clWindowText;
+  //Canvas.Pen.Style := psSolid;
+  //Canvas.Rectangle(0, 0, Width-1, Height-1);
+end;
+
+constructor TGridPopupForm.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FDBGrid := TDBGrid.Create(Self);
+  FDBGrid.OnClick := @GridClick;
+  FDBGrid.OnKeyDown := @GridKeyDown;
+
+  FDBGrid.Parent := Self;
+  FDBGrid.Align := alClient;
+  FDBGrid.ReadOnly := true;
+  FDBGrid.AutoEdit := false;
+  FDBGrid.AutoFillColumns := true;
+  FDBGrid.Options := [dgTitles,dgColumnResize,dgColumnMove,dgColLines,dgRowSelect,dgAlwaysShowSelection,dgConfirmDelete,dgCancelOnExit,dgAnyButtonCanSelect,dgDisableDelete,dgDisableInsert];
+end;
+
+destructor TGridPopupForm.Destroy;
+begin
+  FDBGrid.Free;
+  inherited Destroy;
+end;
+
 
 
 { TDBLookupDataLinkPlus }
@@ -212,7 +430,7 @@ begin
   FLookup.ActiveChange(Self);
 end;
 
-procedure TDBLookupDataLinkPlus.DataEvent(Event: TDataEvent; Info: Ptrint);
+procedure TDBLookupDataLinkPlus.DataEvent(Event: DB.TDataEvent; Info: Ptrint);
 begin
   inherited DataEvent(Event, Info);
 
@@ -428,7 +646,6 @@ end;
 
 procedure TDBLookupPlus.FetchLookupData;
 var
-  KeyIndex, KeyListCount: Integer;
   ListLinkDataSet: TDataSet;
   Bookmark: TBookmark;
 begin
@@ -532,7 +749,12 @@ begin
   if ([csLoading, csDestroying] * ComponentState) = [] then
   begin
     FLookup.Initialize(FDataLink);
-    EditText := IntToStr(FLookup.InternalLookupSource.DataSet.RecordCount);
+
+{ FIXME - this is for debug only }
+    if (FLookup.InternalLookupSource.DataSet.Active) then
+    begin
+      EditText := IntToStr(FLookup.InternalLookupSource.DataSet.RecordCount);
+    end;
 { FIXME
     i := FLookup.GetKeyIndex;
     ItemIndex := i;

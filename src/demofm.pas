@@ -6,13 +6,16 @@ interface
 
 uses
   Classes, SysUtils, db, memds, FileUtil, DateTimePicker, Forms, Controls,
-  Graphics, Dialogs, DBGrids, DbCtrls, EditBtn, ExtCtrls, StdCtrls, Buttons;
+  Graphics, Dialogs, DBGrids, DbCtrls, EditBtn, ExtCtrls, StdCtrls, Buttons,
+  ComboEx;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
+    CheckComboBox1: TCheckComboBox;
+    ComboBoxEx1: TComboBoxEx;
     DataSource1: TDataSource;
     DateEdit1: TDateEdit;
     DateTimePicker1: TDateTimePicker;
