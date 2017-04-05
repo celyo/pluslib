@@ -43,8 +43,8 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Initialize(AControlDataLink: TFieldDataLink);
-    function KeyFieldValue: Variant;
-    function ListFieldValue: Variant;
+    function GetKeyFieldValue: Variant;
+    function GetListFieldValue: Variant;
     // properties to be published by owner control
     // these are not used where data control Field is dbLookup
     property KeyField: string read GetKeyFieldName write SetKeyFieldName;
@@ -104,6 +104,8 @@ type
     function GetPopupDisplaySettings: TPopupDisplaySettings;
     procedure SetPopupDisplaySettings(AValue: TPopupDisplaySettings);
   protected
+    procedure DrawArrowButtonGlyph;
+    procedure FocusAndMaybeSelectAll;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure EditChange; override;
     procedure ButtonClick; override;
@@ -115,12 +117,13 @@ type
     procedure InitializeWnd; override;
     procedure Loaded; override;
 
-    procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    procedure EditKeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UpdateData(Sender: TObject); virtual;
     procedure DataChange(Sender: TObject); virtual;
     procedure WndProc(var Message: TLMessage); override;
 
     function HandleNullKey(var Key: Word; Shift: TShiftState): Boolean;
+    function HandleDropDownKey(var Key: Word; Shift: TShiftState): Boolean;
     procedure HandlePopupReturnValue(Sender: TObject; const AValue: Variant);
     procedure HandlePopupShowHide(Sender: TObject);
   public
@@ -149,6 +152,9 @@ type
     property ButtonCursor;
     property ButtonHint;
     property ButtonWidth;
+    property FocusOnButtonClick;
+    property Glyph;
+    property NumGlyphs;
     property Action;
     property Align;
     property Anchors;
@@ -161,13 +167,10 @@ type
     property Color;
     property Constraints;
     property DirectInput;
-    property Glyph;
-    property NumGlyphs;
     property DragMode;
     property EchoMode;
     property Enabled;
     property Flat;
-    property FocusOnButtonClick;
     property Font;
     property Layout;
     property MaxLength;
@@ -237,34 +240,38 @@ private
   FClosed: boolean;
   FParentRect: TRect;
   FOnReturnValue: TReturnValueEvent;
+  FKeyFields : String;
+  FListFields : String;
   function GetDataSource: TDataSource;
   function GetValue: Variant;
   procedure SetDataSource(AValue: TDataSource);
-  procedure SetValue(AValue: Variant);
 
+  procedure InitializeGridColumns;
+  procedure InitializeGrid(ADataSource : TDataSource; AKeyFields : String; AListFields : String);
   procedure Initialize(const ParentRect: TRect; AValue: Variant;
                        const DisplaySettings: TPopupDisplaySettings);
   procedure KeepInView;
   procedure ApplyDisplaySettings(ADisplaySettings: TPopupDisplaySettings);
   procedure ReturnValue;
 
-  procedure GridClick(Sender: TObject);
+  procedure GridClick(Column: TColumn);
   procedure GridKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   procedure FormDeactivate(Sender: TObject);
 protected
   procedure DoClose(var CloseAction: TCloseAction); override;
   procedure DoCreate; override;
   procedure Deactivate; override;
+  function Locate(AValue : Variant) : Boolean;
 
   property DataSource : TDataSource read GetDataSource write SetDataSource;
-  property Value : Variant read GetValue write SetValue;
+  property Value : Variant read GetValue;
   procedure Paint; override;
 public
   constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
   destructor Destroy; override;
 end;
 
-procedure TGridPopupForm.GridClick(Sender: TObject);
+procedure TGridPopupForm.GridClick(Column: TColumn);
 begin
   ReturnValue;
 end;
@@ -303,12 +310,15 @@ begin
   FParentRect := ParentRect;
   ApplyDisplaySettings(DisplaySettings);
   KeepInView;
-  Value := AValue;
+  Locate(AValue);
 end;
 
 function TGridPopupForm.GetValue: Variant;
 begin
-  Result := Null; //FIXME
+  if Assigned(FDBGrid.DataSource) and FDBGrid.DataSource.DataSet.Active and (FKeyFields <> '') then
+    Result := FDBGrid.DataSource.DataSet.FieldValues[FKeyFields]
+  else
+    Result := Null;
 end;
 
 function TGridPopupForm.GetDataSource: TDataSource;
@@ -401,9 +411,59 @@ begin
   FormDeactivate(Self);
 end;
 
-procedure TGridPopupForm.SetValue(AValue: Variant);
+function TGridPopupForm.Locate(AValue: Variant) : Boolean;
 begin
+  if Assigned(FDBGrid.DataSource) and FDBGrid.DataSource.DataSet.Active and (FKeyFields <> '') then
+  begin
+    FDBGrid.DataSource.DataSet.DisableControls;
+    try
+      Result := FDBGrid.DataSource.DataSet.Locate(FKeyFields, AValue, []);
+    finally
+      FDBGrid.DataSource.DataSet.EnableControls;
+    end;
+  end
+  else
+  begin
+    Result := false;
+  end;
+end;
 
+procedure TGridPopupForm.InitializeGridColumns;
+var
+  AListFields : TStringList;
+  aIndex : Integer;
+begin
+  AListFields := TStringList.Create;
+  FDBGrid.Columns.BeginUpdate;
+  try
+    FDBGrid.Columns.Clear;
+
+    AListFields.Delimiter := ';';
+    AListFields.DelimitedText := FListFields;
+
+    for aIndex := 0 to AListFields.Count - 1 do
+    begin
+      with FDBGrid.Columns.Add do
+      begin
+        FieldName := AListFields[aIndex];
+        ReadOnly := true;
+        Visible := true;
+      end;
+    end;
+  finally
+    FDBGrid.Columns.EndUpdate;
+    AListFields.Free;
+  end;
+end;
+
+procedure TGridPopupForm.InitializeGrid(ADataSource: TDataSource;
+  AKeyFields: String; AListFields: String);
+begin
+  DataSource := ADataSource;
+  FKeyFields := AKeyFields;
+  FListFields := AListFields;
+
+  InitializeGridColumns;
 end;
 
 procedure TGridPopupForm.Paint;
@@ -423,7 +483,7 @@ begin
   ShowInTaskBar := stNever;
 
   FDBGrid := TDBGrid.Create(Self);
-  FDBGrid.OnClick := @GridClick;
+  FDBGrid.OnCellClick := @GridClick;
   FDBGrid.OnKeyDown := @GridKeyDown;
 
   FDBGrid.Parent := Self;
@@ -746,20 +806,38 @@ begin
   end;
 end;
 
-function TDBLookupPlus.KeyFieldValue: Variant;
+function TDBLookupPlus.GetKeyFieldValue: Variant;
 begin
-  if Assigned(FListLink) and FListLink.Active and (FKeyFieldNames <> '') then
-    Result := FListLink.DataSet.FieldValues[FKeyFieldNames]
+  if Assigned(FInternalLookupSource) and Assigned(FInternalLookupSource.DataSet) and FInternalLookupSource.DataSet.Active and (FKeyFieldNames <> '') then
+  begin
+    Result := FInternalLookupSource.DataSet.FieldValues[FKeyFieldNames]
+  end
   else
+  begin
     Result := Null;
+  end;
 end;
 
-function TDBLookupPlus.ListFieldValue: Variant;
+function TDBLookupPlus.GetListFieldValue: Variant;
+var
+  aValues : Variant;
 begin
-  if Assigned(FListLink) and FListLink.Active and (FListFieldNames <> '') then
-    Result := FListLink.DataSet.FieldValues[FListFieldNames]
+  if Assigned(FInternalLookupSource) and Assigned(FInternalLookupSource.DataSet) and FInternalLookupSource.DataSet.Active and (FListFieldNames <> '') then
+  begin
+    aValues := FInternalLookupSource.DataSet.FieldValues[FListFieldNames];
+    if VarIsArray(aValues) then
+    begin
+      Result := aValues[FListFieldIndex];
+    end
+    else
+    begin
+      Result := aValues;
+    end;
+  end
   else
+  begin
     Result := Null;
+  end;
 end;
 
 { TDBLookupComboBoxPlus }
@@ -795,6 +873,68 @@ begin
   FPopupDisplaySettings := AValue;
 end;
 
+procedure TDBLookupComboBoxPlus.DrawArrowButtonGlyph;
+type
+TArrowShape = (asClassicSmaller, asClassicLarger, asModernSmaller,
+                                           asModernLarger, asYetAnotherShape);
+const
+  ArrowColor = TColor($8D665A);
+var
+  AArrowShape : TArrowShape = asClassicSmaller;
+begin
+// First I ment to put arrow images in a lrs file. In my opinion, however, that
+// wouldn't be an elegant option for so simple shapes.
+
+  if Assigned(Glyph) then
+  begin
+    Glyph.SetSize(9, 6);
+    Glyph.Canvas.Brush.Style := bsSolid;
+    Glyph.Canvas.Brush.Color := clSkyBlue;
+    Glyph.Canvas.FillRect(0, 0, 9, 6);
+    Glyph.Canvas.Pen.Color := ArrowColor;
+    Glyph.Canvas.Brush.Color := Glyph.Canvas.Pen.Color;
+
+{ Let's draw shape of the arrow on the button: }
+    case AArrowShape of
+      asClassicLarger:
+        { triangle: }
+        Glyph.Canvas.Polygon([Point(0, 1), Point(8, 1),
+                                                        Point(4, 5)]);
+      asClassicSmaller:
+        { triangle -- smaller variant:  }
+        Glyph.Canvas.Polygon([Point(1, 2), Point(7, 2),
+                                                        Point(4, 5)]);
+      asModernLarger:
+        { modern: }
+        Glyph.Canvas.Polygon([Point(0, 1), Point(1, 0),
+                          Point(4, 3), Point(7, 0), Point(8, 1), Point(4, 5)]);
+      asModernSmaller:
+        { modern -- smaller variant:    }
+        Glyph.Canvas.Polygon([Point(1, 2), Point(2, 1),
+                          Point(4, 3), Point(6, 1), Point(7, 2), Point(4, 5)]);
+      asYetAnotherShape:
+        { something in between, not very pretty:  }
+        Glyph.Canvas.Polygon([Point(0, 1), Point(1, 0),
+              Point(2, 1), Point(6, 1),Point(7, 0), Point(8, 1), Point(4, 5)]);
+    end;
+
+    Glyph.Mask(clSkyBlue);
+  end;
+end;
+
+procedure TDBLookupComboBoxPlus.FocusAndMaybeSelectAll;
+begin
+  Edit.SetFocus;
+  if AutoSelect then
+  begin
+    Edit.SelectAll;
+  end
+  else
+  begin
+    Edit.SelStart := MaxInt;
+  end;
+end;
+
 procedure TDBLookupComboBoxPlus.CMGetDataLink(var Message: TLMessage);
 begin
   Message.Result := PtrUInt(FDataLink);
@@ -828,7 +968,7 @@ end;
 
 function TDBLookupComboBoxPlus.GetKeyValue: variant;
 begin
-  Result := FLookup.KeyFieldValue;
+  Result := FLookup.GetKeyFieldValue;
 end;
 
 function TDBLookupComboBoxPlus.GetListField: string;
@@ -909,6 +1049,9 @@ begin
 
   FLookup := TDBLookupPlus.Create(Self);
   FDataLink.OnActiveChange := @ActiveChange;
+
+  FocusOnButtonClick := false;
+  DrawArrowButtonGlyph;
 end;
 
 destructor TDBLookupComboBoxPlus.Destroy;
@@ -964,6 +1107,7 @@ procedure TDBLookupComboBoxPlus.ButtonClick;
 begin
   inherited ButtonClick;
   DropDown;
+  //if FocusOnButtonClick then FocusAndMaybeSelectAll;
 end;
 
 procedure TDBLookupComboBoxPlus.CloseUp;
@@ -989,6 +1133,7 @@ begin
 
 
   AControlOrigin := ControlOrigin;
+  AGridPopupForm.InitializeGrid(FLookup.InternalLookupSource, FLookup.KeyField, FLookup.ListField);
   AGridPopupForm.Initialize(Rect(AControlOrigin.x, AControlOrigin.Y, AControlOrigin.x + Width, AControlOrigin.y + Height), KeyValue, PopupDisplaySettings);
   AGridPopupForm.FOnReturnValue := @HandlePopupReturnValue;
   AGridPopupForm.OnShow := @HandlePopupShowHide;
@@ -1009,14 +1154,19 @@ begin
   UpdateLookup;
 end;
 
-procedure TDBLookupComboBoxPlus.KeyDown(var Key: Word; Shift: TShiftState);
+procedure TDBLookupComboBoxPlus.EditKeyDown(var Key: Word; Shift: TShiftState);
 begin
   if HandleNullKey(Key, Shift) then
   begin
     //clear selection
     Text := '';
+  end
+  else if HandleDropDownKey(Key, Shift) then
+  begin
+    //
   end;
-  inherited KeyDown(Key, Shift);
+
+  inherited EditKeyDown(Key, Shift);
 end;
 
 procedure TDBLookupComboBoxPlus.UpdateData(Sender: TObject);
@@ -1099,7 +1249,7 @@ var
 begin
   Result := false;
 
-  if FNullValueKey=KeyToShortCut(Key, Shift) then
+  if FNullValueKey = KeyToShortCut(Key, Shift) then
   begin
     if Assigned(FDataLink) and FDataLink.CanModify then
     begin
@@ -1114,10 +1264,25 @@ begin
   end;
 end;
 
+function TDBLookupComboBoxPlus.HandleDropDownKey(var Key: Word;
+  Shift: TShiftState): Boolean;
+begin
+  Result := false;
+
+  if (Key = VK_DOWN) and (Shift = [ssAlt]) then
+  begin
+    Result := true;
+    Key:=VK_UNKNOWN;
+
+    DropDown;
+  end;
+end;
+
 procedure TDBLookupComboBoxPlus.HandlePopupReturnValue(Sender: TObject;
   const AValue: Variant);
 begin
-  //TODO
+  { FIXME - this is for debug only }
+  EditText := AValue;
 end;
 
 procedure TDBLookupComboBoxPlus.HandlePopupShowHide(Sender: TObject);
