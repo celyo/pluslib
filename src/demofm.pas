@@ -62,7 +62,7 @@ begin
 
   MemDataset1.Open;
 
-  for aCnt := 0 to 100 do
+  for aCnt := 0 to 1000 do
   begin
     MemDataset1.Append;
 
@@ -89,7 +89,7 @@ begin
   DBLookupCombo.Height := 27;
 
   DBLookupCombo.ListSource := DataSource1;
-  DBLookupCombo.ListField := 'NAME';
+  DBLookupCombo.ListField := 'NAME;DESCRIPTION';
   DBLookupCombo.KeyField := 'ID';
 
   DBLookupCombo.Parent := Panel1;

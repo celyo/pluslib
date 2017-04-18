@@ -34,17 +34,19 @@ type
     procedure SetKeyFieldName(const Value: string);
     procedure SetListFieldName(const Value: string);
     procedure SetListSource(Value: TDataSource);
-    procedure DoInitialize;
-    procedure InitMemDataSet;
   protected
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
     procedure FetchLookupData;
+    procedure DoInitialize;
+    procedure InitMemDataSet;
+    function SingleListField: String;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure Initialize(AControlDataLink: TFieldDataLink);
     function GetKeyFieldValue: Variant;
     function GetListFieldValue: Variant;
+    function Locate(AValue : Variant) : Boolean;
     // properties to be published by owner control
     // these are not used where data control Field is dbLookup
     property KeyField: string read GetKeyFieldName write SetKeyFieldName;
@@ -80,6 +82,7 @@ type
     FPopupDisplaySettings: TPopupDisplaySettings;
     FPopupForm: TForm;
     FDroppedDown: Boolean;
+    procedure UpdateText;
     procedure UpdateLookup;
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
     procedure ActiveChange(Sender: TObject);
@@ -254,7 +257,7 @@ private
   procedure ApplyDisplaySettings(ADisplaySettings: TPopupDisplaySettings);
   procedure ReturnValue;
 
-  procedure GridClick(Column: TColumn);
+  procedure GridClick({%H-}Column: TColumn);
   procedure GridKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   procedure FormDeactivate(Sender: TObject);
 protected
@@ -671,6 +674,29 @@ begin
   FMemDataSet.FieldDefs.Update;
 end;
 
+function TDBLookupPlus.SingleListField: String;
+var
+  AFieldNameList : TStringList;
+begin
+  Result := '';
+
+  if (FListFieldNames <> '') then
+  begin
+    AFieldNameList := TStringList.Create;
+    try
+      AFieldNameList.Delimiter := ';';
+      AFieldNameList.DelimitedText := FListFieldNames;
+
+      if (FListFieldIndex >= 0) and (FListFieldIndex < AFieldNameList.Count) then
+      begin
+        Result := AFieldNameList[FListFieldIndex];
+      end;
+    finally
+      AFieldNameList.Free;
+    end;
+  end;
+end;
+
 function TDBLookupPlus.GetKeyFieldName: string;
 begin
   if FHasLookUpField then
@@ -819,20 +845,10 @@ begin
 end;
 
 function TDBLookupPlus.GetListFieldValue: Variant;
-var
-  aValues : Variant;
 begin
   if Assigned(FInternalLookupSource) and Assigned(FInternalLookupSource.DataSet) and FInternalLookupSource.DataSet.Active and (FListFieldNames <> '') then
   begin
-    aValues := FInternalLookupSource.DataSet.FieldValues[FListFieldNames];
-    if VarIsArray(aValues) then
-    begin
-      Result := aValues[FListFieldIndex];
-    end
-    else
-    begin
-      Result := aValues;
-    end;
+    Result := FInternalLookupSource.DataSet.FieldByName(SingleListField).AsVariant;
   end
   else
   begin
@@ -840,7 +856,39 @@ begin
   end;
 end;
 
+function TDBLookupPlus.Locate(AValue: Variant): Boolean;
+begin
+  if Assigned(FInternalLookupSource) and Assigned(FInternalLookupSource.DataSet) and FInternalLookupSource.DataSet.Active and (FKeyFieldNames <> '') then
+  begin
+    FInternalLookupSource.DataSet.DisableControls;
+    try
+      Result := FInternalLookupSource.DataSet.Locate(FKeyFieldNames, AValue, []);
+    finally
+      FInternalLookupSource.DataSet.EnableControls;
+    end;
+  end
+  else
+  begin
+    Result := false;
+  end;
+end;
+
 { TDBLookupComboBoxPlus }
+
+procedure TDBLookupComboBoxPlus.UpdateText;
+var
+  AListValue : Variant;
+begin
+  AListValue := FLookup.GetListFieldValue;
+  if not VarIsNull(AListValue) then
+  begin
+    EditText := AListValue;
+  end
+  else
+  begin
+    EditText := '';
+  end;
+end;
 
 procedure TDBLookupComboBoxPlus.UpdateLookup;
 begin
@@ -849,16 +897,11 @@ begin
     FLookup.Initialize(FDataLink);
 
 { FIXME - this is for debug only }
-    if (FLookup.InternalLookupSource.DataSet.Active) then
-    begin
-      EditText := IntToStr(FLookup.InternalLookupSource.DataSet.RecordCount);
-    end;
-{ FIXME
-    i := FLookup.GetKeyIndex;
-    ItemIndex := i;
-    if i = -1 then
-      Text := '';
-}
+    //if (FLookup.InternalLookupSource.DataSet.Active) then
+    //begin
+    //  EditText := IntToStr(FLookup.InternalLookupSource.DataSet.RecordCount);
+    //end;
+    UpdateText;
   end;
 end;
 
@@ -943,7 +986,9 @@ end;
 procedure TDBLookupComboBoxPlus.ActiveChange(Sender: TObject);
 begin
   if FDataLink.Active then
+  begin
     UpdateLookup;
+  end;
 end;
 
 function TDBLookupComboBoxPlus.GetDataField: string;
@@ -1010,7 +1055,8 @@ end;
 
 procedure TDBLookupComboBoxPlus.SetKeyValue(AValue: variant);
 begin
-//FIXME  ItemIndex := FLookup.GetKeyIndex(AValue);
+  FLookup.Locate(AValue);
+  UpdateText;
 end;
 
 procedure TDBLookupComboBoxPlus.SetListField(AValue: string);
@@ -1158,12 +1204,12 @@ procedure TDBLookupComboBoxPlus.EditKeyDown(var Key: Word; Shift: TShiftState);
 begin
   if HandleNullKey(Key, Shift) then
   begin
-    //clear selection
+    // clear selection
     Text := '';
   end
   else if HandleDropDownKey(Key, Shift) then
   begin
-    //
+    // Do nothing here
   end;
 
   inherited EditKeyDown(Key, Shift);
@@ -1185,17 +1231,8 @@ begin
 end;
 
 procedure TDBLookupComboBoxPlus.DataChange(Sender: TObject);
-var
-  i: Integer;
 begin
-  //FIXME
-  //if FDatalink.Active then
-  //  i := FLookup.GetKeyIndex
-  //else
-  //  i := -1;
-  //ItemIndex := i;
-  //if i = -1 then
-  //  Text := '';
+  UpdateText;
 end;
 
 procedure TDBLookupComboBoxPlus.Select;
@@ -1211,7 +1248,7 @@ begin
     begin
        // if cannot modify, let it reset
        FDatalink.Reset;
-       DataChange(Self);
+       UpdateText;
     end;
   finally
     FDataLink.OnDataChange := @DataChange;
@@ -1231,9 +1268,14 @@ begin
           //When Edit is called the Text property is reset to the previous value
           //Add a workaround while bug is not fixed
           FDataLink.OnDataChange := nil;
-          FDatalink.Edit;
-          FDataLink.Modified;
-          FDataLink.OnDataChange := @DataChange;
+          try
+            FDatalink.Edit;
+            FDataLink.Modified;
+          finally
+            FDataLink.OnDataChange := @DataChange;
+          end;
+
+
           inherited WndProc(Message);
         end;
       end;
@@ -1281,8 +1323,7 @@ end;
 procedure TDBLookupComboBoxPlus.HandlePopupReturnValue(Sender: TObject;
   const AValue: Variant);
 begin
-  { FIXME - this is for debug only }
-  EditText := AValue;
+  KeyValue := AValue;
 end;
 
 procedure TDBLookupComboBoxPlus.HandlePopupShowHide(Sender: TObject);
