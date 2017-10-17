@@ -1,12 +1,12 @@
 object Form1: TForm1
   Left = 0
-  Height = 460
+  Height = 919
   Top = 0
-  Width = 462
+  Width = 1093
   ActiveControl = DBGrid1
   Caption = 'Form1'
-  ClientHeight = 460
-  ClientWidth = 462
+  ClientHeight = 919
+  ClientWidth = 1093
   OnCreate = FormCreate
   Position = poScreenCenter
   LCLVersion = '1.6.4.0'
@@ -14,8 +14,8 @@ object Form1: TForm1
   object DBGrid1: TDBGrid
     Left = 0
     Height = 252
-    Top = 208
-    Width = 462
+    Top = 667
+    Width = 1093
     Align = alBottom
     AutoEdit = False
     AutoFillColumns = True
@@ -23,17 +23,17 @@ object Form1: TForm1
     Columns = <    
       item
         Title.Caption = 'NAME'
-        Width = 148
+        Width = 358
         FieldName = 'NAME'
       end    
       item
         Title.Caption = 'DESCRIPTION'
-        Width = 148
+        Width = 358
         FieldName = 'DESCRIPTION'
       end    
       item
         Title.Caption = 'PRICE'
-        Width = 149
+        Width = 360
         FieldName = 'PRICE'
       end>
     DataSource = DataSource1
@@ -43,10 +43,10 @@ object Form1: TForm1
     TitleStyle = tsNative
   end
   object DBLookupComboBox1: TDBLookupComboBox
-    Left = 40
-    Height = 27
-    Top = 88
-    Width = 359
+    Left = 43
+    Height = 36
+    Top = 144
+    Width = 400
     KeyField = 'ID'
     ListField = 'NAME'
     ListFieldIndex = 0
@@ -56,9 +56,9 @@ object Form1: TForm1
   end
   object DateEdit1: TDateEdit
     Left = 43
-    Height = 27
-    Top = 17
-    Width = 356
+    Height = 36
+    Top = 32
+    Width = 400
     CalendarDisplaySettings = [dsShowHeadings, dsShowDayNames]
     DateOrder = doNone
     ButtonWidth = 23
@@ -67,19 +67,19 @@ object Form1: TForm1
     TabOrder = 2
   end
   object Panel1: TPanel
-    Left = 16
-    Height = 50
-    Top = 136
-    Width = 424
+    Left = 43
+    Height = 36
+    Top = 200
+    Width = 400
     BevelOuter = bvNone
     Caption = 'Container for ComboboxPlus'
     TabOrder = 3
   end
   object DateTimePicker1: TDateTimePicker
     Left = 43
-    Height = 23
-    Top = 56
-    Width = 85
+    Height = 32
+    Top = 88
+    Width = 121
     CenturyFrom = 1941
     MaxDate = 2958465
     MinDate = -53780
@@ -98,9 +98,9 @@ object Form1: TForm1
     MonthNames = 'Long'
   end
   object ComboBoxEx1: TComboBoxEx
-    Left = 140
-    Height = 29
-    Top = 56
+    Left = 208
+    Height = 38
+    Top = 88
     Width = 100
     ItemHeight = 0
     ItemsEx = <>
@@ -108,12 +108,21 @@ object Form1: TForm1
     TabOrder = 5
   end
   object CheckComboBox1: TCheckComboBox
-    Left = 248
-    Height = 29
-    Top = 56
+    Left = 343
+    Height = 38
+    Top = 88
     Width = 100
     ItemHeight = 0
     TabOrder = 6
+  end
+  object SetValue10Button: TButton
+    Left = 464
+    Height = 36
+    Top = 200
+    Width = 136
+    Caption = 'SetValue10'
+    OnClick = SetValue10ButtonClick
+    TabOrder = 7
   end
   object DataSource1: TDataSource
     DataSet = MemDataset1

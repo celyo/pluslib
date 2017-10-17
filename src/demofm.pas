@@ -7,13 +7,14 @@ interface
 uses
   Classes, SysUtils, db, memds, FileUtil, DateTimePicker, Forms, Controls,
   Graphics, Dialogs, DBGrids, DbCtrls, EditBtn, ExtCtrls, StdCtrls, Buttons,
-  ComboEx;
+  ComboEx, dblookupcomboboxplus;
 
 type
 
   { TForm1 }
 
   TForm1 = class(TForm)
+    SetValue10Button: TButton;
     CheckComboBox1: TCheckComboBox;
     ComboBoxEx1: TComboBoxEx;
     DataSource1: TDataSource;
@@ -24,6 +25,9 @@ type
     MemDataset1: TMemDataset;
     Panel1: TPanel;
     procedure FormCreate(Sender: TObject);
+    procedure SetValue10ButtonClick(Sender: TObject);
+  private
+    DBLookupCombo : TDBLookupComboBoxPlus;
   private
     procedure InitDataset;
     procedure CreateDBLookupComboboxPlus;
@@ -39,9 +43,6 @@ implementation
 
 {$R *.lfm}
 
-uses
-  dblookupcomboboxplus;
-
 { TForm1 }
 
 procedure TForm1.FormCreate(Sender: TObject);
@@ -49,6 +50,11 @@ begin
   InitDataset;
   CreateDBLookupComboboxPlus;
   CreateSimpleEdit;
+end;
+
+procedure TForm1.SetValue10ButtonClick(Sender: TObject);
+begin
+  DBLookupCombo.KeyValue := 10;
 end;
 
 procedure TForm1.InitDataset;
@@ -78,8 +84,6 @@ begin
 end;
 
 procedure TForm1.CreateDBLookupComboboxPlus;
-var
-  DBLookupCombo : TDBLookupComboBoxPlus;
 begin
   DBLookupCombo := TDBLookupComboBoxPlus.Create(Self);
 
@@ -93,6 +97,7 @@ begin
   DBLookupCombo.KeyField := 'ID';
 
   DBLookupCombo.Parent := Panel1;
+  DBLookupCombo.Align := alClient;
 end;
 
 procedure TForm1.CreateSimpleEdit;

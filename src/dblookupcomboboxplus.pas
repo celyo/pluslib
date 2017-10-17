@@ -82,8 +82,10 @@ type
     FPopupDisplaySettings: TPopupDisplaySettings;
     FPopupForm: TForm;
     FDroppedDown: Boolean;
+    FKeyValue : Variant;
     procedure UpdateText;
     procedure UpdateLookup;
+    procedure UpdateButton;
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
     procedure ActiveChange(Sender: TObject);
 
@@ -119,6 +121,10 @@ type
 
     procedure InitializeWnd; override;
     procedure Loaded; override;
+
+    procedure DoOnResize; override;
+    procedure DoOnChangeBounds; override;
+
 
     procedure EditKeyDown(var Key: Word; Shift: TShiftState); override;
     procedure UpdateData(Sender: TObject); virtual;
@@ -264,6 +270,7 @@ protected
   procedure DoClose(var CloseAction: TCloseAction); override;
   procedure DoCreate; override;
   procedure Deactivate; override;
+
   function Locate(AValue : Variant) : Boolean;
 
   property DataSource : TDataSource read GetDataSource write SetDataSource;
@@ -421,6 +428,11 @@ begin
     FDBGrid.DataSource.DataSet.DisableControls;
     try
       Result := FDBGrid.DataSource.DataSet.Locate(FKeyFields, AValue, []);
+
+      if not Result then
+      begin
+        FDBGrid.DataSource.DataSet.First;
+      end;
     finally
       FDBGrid.DataSource.DataSet.EnableControls;
     end;
@@ -905,6 +917,11 @@ begin
   end;
 end;
 
+procedure TDBLookupComboBoxPlus.UpdateButton;
+begin
+  ButtonWidth := Height;
+end;
+
 function TDBLookupComboBoxPlus.GetPopupDisplaySettings: TPopupDisplaySettings;
 begin
   Result := FPopupDisplaySettings;
@@ -925,9 +942,6 @@ const
 var
   AArrowShape : TArrowShape = asClassicSmaller;
 begin
-// First I ment to put arrow images in a lrs file. In my opinion, however, that
-// wouldn't be an elegant option for so simple shapes.
-
   if Assigned(Glyph) then
   begin
     Glyph.SetSize(9, 6);
@@ -1013,7 +1027,8 @@ end;
 
 function TDBLookupComboBoxPlus.GetKeyValue: variant;
 begin
-  Result := FLookup.GetKeyFieldValue;
+//  Result := FLookup.GetKeyFieldValue;
+  Result := FKeyValue;
 end;
 
 function TDBLookupComboBoxPlus.GetListField: string;
@@ -1055,7 +1070,8 @@ end;
 
 procedure TDBLookupComboBoxPlus.SetKeyValue(AValue: variant);
 begin
-  FLookup.Locate(AValue);
+  FKeyValue := AValue;
+  FLookup.Locate(FKeyValue);
   UpdateText;
 end;
 
@@ -1086,6 +1102,8 @@ constructor TDBLookupComboBoxPlus.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
 
+  FKeyValue := Null;
+
   FPopupDisplaySettings := TPopupDisplaySettings.Create;
 
   FDataLink := TFieldDataLink.Create;
@@ -1098,6 +1116,7 @@ begin
 
   FocusOnButtonClick := false;
   DrawArrowButtonGlyph;
+  UpdateButton;
 end;
 
 destructor TDBLookupComboBoxPlus.Destroy;
@@ -1197,7 +1216,20 @@ end;
 procedure TDBLookupComboBoxPlus.Loaded;
 begin
   inherited Loaded;
+  UpdateButton;
   UpdateLookup;
+end;
+
+procedure TDBLookupComboBoxPlus.DoOnResize;
+begin
+  inherited DoOnResize;
+  UpdateButton;
+end;
+
+procedure TDBLookupComboBoxPlus.DoOnChangeBounds;
+begin
+  inherited DoOnChangeBounds;
+  UpdateButton;
 end;
 
 procedure TDBLookupComboBoxPlus.EditKeyDown(var Key: Word; Shift: TShiftState);
