@@ -47,6 +47,7 @@ type
     function GetKeyFieldValue: Variant;
     function GetListFieldValue: Variant;
     function Locate(AValue : Variant) : Boolean;
+    function LocateText(AText : String; PartialSearch : Boolean) : Boolean;
     // properties to be published by owner control
     // these are not used where data control Field is dbLookup
     property KeyField: string read GetKeyFieldName write SetKeyFieldName;
@@ -79,6 +80,7 @@ type
     FDataLink: TFieldDataLink;
     FLookup: TDBLookupPlus;
     FNullValueKey: TShortcut;
+    FOnKeyValueChanged: TNotifyEvent;
     FPopupDisplaySettings: TPopupDisplaySettings;
     FPopupForm: TForm;
     FDroppedDown: Boolean;
@@ -88,6 +90,7 @@ type
     procedure UpdateButton;
     procedure CMGetDataLink(var Message: TLMessage); message CM_GETDATALINK;
     procedure ActiveChange(Sender: TObject);
+    function LocateText(AText: String; PartialSearch: Boolean): Boolean;
 
     function GetDataField: string;
     function GetDataSource: TDataSource;
@@ -124,6 +127,7 @@ type
 
     procedure DoOnResize; override;
     procedure DoOnChangeBounds; override;
+    procedure DoOnKeyValueChanged;
 
 
     procedure EditKeyDown(var Key: Word; Shift: TShiftState); override;
@@ -155,6 +159,9 @@ type
 
     property PopupDisplaySettings: TPopupDisplaySettings read GetPopupDisplaySettings write SetPopupDisplaySettings;
     property ReadOnly: Boolean read GetReadOnly write SetReadOnly default False;
+
+    property OnKeyValueChanged: TNotifyEvent read FOnKeyValueChanged write FOnKeyValueChanged;
+
 
     property ButtonOnlyWhenFocused;
     property ButtonCaption;
@@ -280,6 +287,30 @@ public
   constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
   destructor Destroy; override;
 end;
+
+function VarEquals(const V1, V2: Variant): Boolean;
+var i: Integer;
+begin
+  Result := not (VarIsArray(V1) xor VarIsArray(V2));
+  if not Result then Exit;
+  Result := False;
+  try
+    if VarIsArray(V1) and VarIsArray(V2) and
+      (VarArrayDimCount(V1) = VarArrayDimCount(V2)) and
+      (VarArrayLowBound(V1, 1) = VarArrayLowBound(V2, 1)) and
+      (VarArrayHighBound(V1, 1) = VarArrayHighBound(V2, 1))
+      then
+      for i := VarArrayLowBound(V1, 1) to VarArrayHighBound(V1, 1) do
+      begin
+        Result := V1[i] = V2[i];
+        if not Result then Exit;
+      end
+    else
+      Result := V1 = V2;
+  except
+  end;
+end;
+
 
 procedure TGridPopupForm.GridClick(Column: TColumn);
 begin
@@ -885,16 +916,41 @@ begin
   end;
 end;
 
+function TDBLookupPlus.LocateText(AText: String; PartialSearch: Boolean): Boolean;
+var
+  Options : TLocateOptions;
+begin
+  if PartialSearch then
+  begin
+    Options := [loCaseInsensitive, loPartialKey];
+  end
+  else
+  begin
+    Options := [loCaseInsensitive];
+  end;
+
+  if Assigned(FInternalLookupSource) and Assigned(FInternalLookupSource.DataSet) and FInternalLookupSource.DataSet.Active and (FListFieldNames <> '') then
+  begin
+    FInternalLookupSource.DataSet.DisableControls;
+    try
+      Result := FInternalLookupSource.DataSet.Locate(SingleListField, AText, Options);
+    finally
+      FInternalLookupSource.DataSet.EnableControls;
+    end;
+  end
+  else
+  begin
+    Result := false;
+  end;
+end;
+
 { TDBLookupComboBoxPlus }
 
 procedure TDBLookupComboBoxPlus.UpdateText;
-var
-  AListValue : Variant;
 begin
-  AListValue := FLookup.GetListFieldValue;
-  if not VarIsNull(AListValue) then
+  if not VarIsNull(FKeyValue) then
   begin
-    EditText := AListValue;
+    EditText := FLookup.GetListFieldValue;
   end
   else
   begin
@@ -1005,6 +1061,28 @@ begin
   end;
 end;
 
+function TDBLookupComboBoxPlus.LocateText(AText: String; PartialSearch: Boolean): Boolean;
+begin
+  Result := False;
+
+//  if not CanModify(True) then Exit;
+
+  try
+    Result := FLookup.LocateText(AText, PartialSearch);
+    if Result then
+    begin
+      KeyValue := FLookup.GetKeyFieldValue;
+      UpdateText;
+      SelStart := Length(EditText);
+      SelLength := Length(AText) - SelStart;
+    end
+  except
+    //SetEditText(Text);
+    SelStart := Length(EditText);
+    SelLength := Length(EditText) - SelStart;
+  end;
+end;
+
 function TDBLookupComboBoxPlus.GetDataField: string;
 begin
   Result:=FDataLink.FieldName;
@@ -1070,9 +1148,13 @@ end;
 
 procedure TDBLookupComboBoxPlus.SetKeyValue(AValue: variant);
 begin
-  FKeyValue := AValue;
-  FLookup.Locate(FKeyValue);
-  UpdateText;
+  if not VarEquals(FKeyValue, AValue) then
+  begin
+    FKeyValue := AValue;
+    FLookup.Locate(FKeyValue);
+    UpdateText;
+    DoOnKeyValueChanged;
+  end;
 end;
 
 procedure TDBLookupComboBoxPlus.SetListField(AValue: string);
@@ -1230,6 +1312,14 @@ procedure TDBLookupComboBoxPlus.DoOnChangeBounds;
 begin
   inherited DoOnChangeBounds;
   UpdateButton;
+end;
+
+procedure TDBLookupComboBoxPlus.DoOnKeyValueChanged;
+begin
+  if Assigned(FOnKeyValueChanged) then
+  begin
+    FOnKeyValueChanged(Self);
+  end;
 end;
 
 procedure TDBLookupComboBoxPlus.EditKeyDown(var Key: Word; Shift: TShiftState);
